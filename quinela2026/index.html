@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, browserLocalPersistence, browserSessionPersistence, setPersistence, indexedDBLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, browserLocalPersistence, browserSessionPersistence, setPersistence, indexedDBLocalPersistence, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, collection, getDocs, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -751,6 +751,17 @@ function renderUsuarios() {
   const el = document.getElementById("admin-usuarios-lista");
   if (el) el.innerHTML = html;
 }
+
+window.resetPassword = async (email, nombre) => {
+  if (!isAdmin) return;
+  if (!confirm(`¿Enviar correo de restablecimiento de contraseña a ${nombre} (${email})?`)) return;
+  try {
+    await sendPasswordResetEmail(auth, email);
+    toast(`📧 Correo enviado a ${email}`,"ok");
+  } catch(e) {
+    toast("Error al enviar correo: " + e.message,"err");
+  }
+};
 
 window.recargarUsuarios = async () => {
   const usSnap = await getDocs(collection(db,"usuarios"));
