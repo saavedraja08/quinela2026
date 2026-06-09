@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>Quiniela Mundial 2026</title>
 <meta name="description" content="Quiniela del Mundial 2026 - EE.UU. México Canadá">
 <meta name="theme-color" content="#16a34a">
@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, browserLocalPersistence, browserSessionPersistence, setPersistence, indexedDBLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, collection, getDocs, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -156,11 +156,26 @@ let pronosticoMundial = {}; // {campeon, subcampeon, tercero}
 let resultadoMundial = {};  // {campeon, subcampeon, tercero} — lo ingresa admin
 
 // ── FIREBASE INIT ─────────────────────────────────────────────────────────────
-function initFirebase() {
+async function initFirebase() {
   try {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
+
+    // Fix móvil: intentar persistencia en orden de compatibilidad
+    // indexedDB → localStorage → sessionStorage
+    try {
+      await setPersistence(auth, indexedDBLocalPersistence);
+    } catch(e1) {
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+      } catch(e2) {
+        try {
+          await setPersistence(auth, browserSessionPersistence);
+        } catch(e3) {}
+      }
+    }
+
     onAuthStateChanged(auth, async user => {
       if (user) {
         currentUser = user;
@@ -213,6 +228,8 @@ window.iniciarSesion = async () => {
   if (!email||!pass) return toast("Completa todos los campos","err");
   try {
     setBtnLoading("btn-login",true);
+    // Fix Safari: establecer persistencia local antes de iniciar sesión
+    try { await setPersistence(auth, browserLocalPersistence); } catch(e) {}
     await signInWithEmailAndPassword(auth,email,pass);
   } catch(e){ toast(errMsg(e.code),"err"); setBtnLoading("btn-login",false); }
 };
@@ -1003,7 +1020,7 @@ document.addEventListener("DOMContentLoaded", initFirebase);
   --r:14px;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;}
 
 /* ── AUTH ── */
 #auth-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:1.5rem;background:linear-gradient(160deg,#0f2419,#14532d,#166534);}
