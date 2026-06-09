@@ -162,17 +162,19 @@ async function initFirebase() {
     auth = getAuth(app);
     db = getFirestore(app);
 
-    // Fix móvil: intentar persistencia en orden de compatibilidad
-    // indexedDB → localStorage → sessionStorage
-    try {
-      await setPersistence(auth, indexedDBLocalPersistence);
-    } catch(e1) {
+    // Detectar Safari iOS PWA
+    const isSafariPWA = window.navigator.standalone === true;
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+    if (isSafariPWA || isSafari) {
+      // Safari: usar localStorage que es más compatible
+      try { await setPersistence(auth, browserLocalPersistence); } catch(e) {}
+    } else {
+      // Android/Chrome: intentar indexedDB primero
       try {
-        await setPersistence(auth, browserLocalPersistence);
-      } catch(e2) {
-        try {
-          await setPersistence(auth, browserSessionPersistence);
-        } catch(e3) {}
+        await setPersistence(auth, indexedDBLocalPersistence);
+      } catch(e) {
+        try { await setPersistence(auth, browserLocalPersistence); } catch(e2) {}
       }
     }
 
@@ -231,10 +233,17 @@ window.iniciarSesion = async () => {
     // Fix Safari: establecer persistencia local antes de iniciar sesión
     try { await setPersistence(auth, browserLocalPersistence); } catch(e) {}
     await signInWithEmailAndPassword(auth,email,pass);
+    // Guardar para Safari PWA
+    localStorage.setItem("qm_email", email);
+    localStorage.setItem("qm_pass", pass);
   } catch(e){ toast(errMsg(e.code),"err"); setBtnLoading("btn-login",false); }
 };
 
-window.cerrarSesion = () => signOut(auth);
+window.cerrarSesion = () => {
+  localStorage.removeItem("qm_email");
+  localStorage.removeItem("qm_pass");
+  signOut(auth);
+};
 
 // ── DATOS ─────────────────────────────────────────────────────────────────────
 async function cargarDatos() {
@@ -820,6 +829,15 @@ function renderPremios() {
 
 // ── RENDER AUTH ───────────────────────────────────────────────────────────────
 function mostrarAuth(){
+  // Safari PWA: check if we have cached credentials
+  const cachedEmail = localStorage.getItem("qm_email");
+  const cachedPass = localStorage.getItem("qm_pass");
+  if (cachedEmail && cachedPass && window.navigator.standalone) {
+    document.getElementById("login-email").value = cachedEmail;
+    document.getElementById("login-pass").value = cachedPass;
+    setTimeout(() => iniciarSesion(), 500);
+    return;
+  }
   document.getElementById("auth-screen").style.display="flex";
   document.getElementById("app-screen").style.display="none";
 }
