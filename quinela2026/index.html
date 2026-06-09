@@ -236,7 +236,11 @@ window.iniciarSesion = async () => {
     // Guardar para Safari PWA
     localStorage.setItem("qm_email", email);
     localStorage.setItem("qm_pass", pass);
-  } catch(e){ toast(errMsg(e.code),"err"); setBtnLoading("btn-login",false); }
+  } catch(e){
+    toast(errMsg(e.code),"err");
+    setBtnLoading("btn-login",false);
+    document.getElementById("btn-login").textContent = "Entrar";
+  }
 };
 
 window.cerrarSesion = () => {
@@ -829,17 +833,42 @@ function renderPremios() {
 
 // ── RENDER AUTH ───────────────────────────────────────────────────────────────
 function mostrarAuth(){
-  // Safari PWA: check if we have cached credentials
   const cachedEmail = localStorage.getItem("qm_email");
   const cachedPass = localStorage.getItem("qm_pass");
-  if (cachedEmail && cachedPass && window.navigator.standalone) {
-    document.getElementById("login-email").value = cachedEmail;
-    document.getElementById("login-pass").value = cachedPass;
-    setTimeout(() => iniciarSesion(), 500);
-    return;
-  }
+  const isPWA = window.navigator.standalone === true;
+
+  // Mostrar pantalla de login primero siempre
   document.getElementById("auth-screen").style.display="flex";
   document.getElementById("app-screen").style.display="none";
+
+  if (cachedEmail && cachedPass) {
+    // Rellenar campos
+    document.getElementById("login-email").value = cachedEmail;
+    document.getElementById("login-pass").value = cachedPass;
+
+    if (isPWA) {
+      // Safari PWA: mostrar mensaje de carga y reintentar con delays mayores
+      const btn = document.getElementById("btn-login");
+      btn.textContent = "Conectando...";
+      btn.disabled = true;
+
+      // Intentar login con reintentos
+      let intentos = 0;
+      const tryLogin = async () => {
+        intentos++;
+        try {
+          await iniciarSesion();
+        } catch(e) {
+          if (intentos < 5) setTimeout(tryLogin, 1500);
+          else {
+            btn.textContent = "Entrar";
+            btn.disabled = false;
+          }
+        }
+      };
+      setTimeout(tryLogin, 1500);
+    }
+  }
 }
 
 window.showLogin = ()=>{
