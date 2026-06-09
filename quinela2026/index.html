@@ -743,6 +743,7 @@ function renderUsuarios() {
           <option value="cancelado" ${insc==="cancelado"?"selected":""}>❌ Cancelado</option>
         </select>
         ${!yo?`<button class="btn-adm" style="background:#7f1d1d;padding:.2rem .4rem;font-size:.7rem;" onclick="rechazarUsuario('${u.uid}')">🗑️ Eliminar</button>`:""}
+        <button class="btn-adm" style="background:#1d4ed8;padding:.2rem .4rem;font-size:.7rem;" onclick="resetPassword('${u.email}','${u.nombre}')">📧 Contraseña</button>
       </div>
     </div>`;
   });
