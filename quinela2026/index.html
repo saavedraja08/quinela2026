@@ -669,11 +669,15 @@ function calcPts(pro,res){
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function esHoy(p){
-  if (fechaSimulada) return p.fecha === fechaSimulada; // fecha simulada: prioridad máxima
-  if (modoTestGlobal) return true;                     // test global: todos los partidos
-  const hoy = new Date();
+  if (modoTestGlobal) return true; // test global: todos los partidos
+  // Verificar si el partido ya inició (bloquear exactamente a la hora de inicio)
+  const ahora = new Date();
+  const inicioPartido = new Date(`${p.fecha}T${p.hora}:00`);
+  if (ahora >= inicioPartido) return false; // partido ya inició, bloquear
+  if (fechaSimulada) return p.fecha === fechaSimulada; // fecha simulada
+  // Solo partidos de hoy que aún no han iniciado
   const [y,m,d] = p.fecha.split("-").map(Number);
-  return hoy.getFullYear()===y && hoy.getMonth()+1===m && hoy.getDate()===d;
+  return ahora.getFullYear()===y && ahora.getMonth()+1===m && ahora.getDate()===d;
 }
 
 function estaTerminado(pid){
