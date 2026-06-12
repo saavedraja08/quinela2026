@@ -152,6 +152,7 @@ let currentUser = null, isAdmin = false;
 let pronosticos = {}, resultados = {}, usuarios = [];
 let vistaActual = "fecha"; // "fecha" o "grupo"
 let partidos = [...PARTIDOS];
+let serverTimeOffset = 0; // diferencia entre reloj local y servidor en ms
 let pronosticoMundial = {}; // {campeon, subcampeon, tercero}
 let resultadoMundial = {};  // {campeon, subcampeon, tercero} — lo ingresa admin
 
@@ -257,6 +258,17 @@ async function cargarDatos() {
   if (extSnap.exists() && extSnap.data().lista) partidos = [...PARTIDOS, ...extSnap.data().lista];
   const proSnap = await getDoc(doc(db,"pronosticos",currentUser.uid));
   pronosticos = proSnap.exists() ? proSnap.data() : {};
+  // Obtener hora del servidor para evitar fraude por reloj local
+  try {
+    const tsSnap = await getDoc(doc(db,"config","server_time"));
+    // Usamos serverTimestamp para calcular el offset
+    await setDoc(doc(db,"config","server_time"),{ts: serverTimestamp()});
+    const tsSnap2 = await getDoc(doc(db,"config","server_time"));
+    if (tsSnap2.exists()) {
+      const serverMs = tsSnap2.data().ts.toMillis();
+      serverTimeOffset = serverMs - Date.now();
+    }
+  } catch(e) { serverTimeOffset = 0; }
   const pmSnap = await getDoc(doc(db,"pronosticos_mundial",currentUser.uid));
   pronosticoMundial = pmSnap.exists() ? pmSnap.data() : {};
   const rmSnap = await getDoc(doc(db,"config","resultado_mundial"));
@@ -668,16 +680,23 @@ function calcPts(pro,res){
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
+function ahoraPanama() {
+  // Hora actual ajustada al servidor + convertida a hora de Panamá (UTC-5)
+  const ahoraUTC = Date.now() + serverTimeOffset;
+  // Panamá es UTC-5 siempre (no tiene horario de verano)
+  return new Date(ahoraUTC - 5 * 60 * 60 * 1000);
+}
+
 function esHoy(p){
-  if (modoTestGlobal) return true; // test global: todos los partidos
-  // Verificar si el partido ya inició (bloquear exactamente a la hora de inicio)
-  const ahora = new Date();
-  const inicioPartido = new Date(`${p.fecha}T${p.hora}:00`);
-  if (ahora >= inicioPartido) return false; // partido ya inició, bloquear
-  if (fechaSimulada) return p.fecha === fechaSimulada; // fecha simulada
-  // Solo partidos de hoy que aún no han iniciado
-  const [y,m,d] = p.fecha.split("-").map(Number);
-  return ahora.getFullYear()===y && ahora.getMonth()+1===m && ahora.getDate()===d;
+  if (modoTestGlobal) return true;
+  const ahora = ahoraPanama();
+  // Construir fecha de inicio del partido en hora Panama
+  const [py,pm,pd] = p.fecha.split("-").map(Number);
+  const [ph,pmin] = p.hora.split(":").map(Number);
+  const inicioPartido = new Date(Date.UTC(py, pm-1, pd, ph+5, pmin)); // UTC+5 para convertir Panama a UTC
+  if (ahora >= new Date(inicioPartido.getTime() - serverTimeOffset)) return false;
+  if (fechaSimulada) return p.fecha === fechaSimulada;
+  return ahora.getUTCFullYear()===py && ahora.getUTCMonth()+1===pm && ahora.getUTCDate()===pd;
 }
 
 function estaTerminado(pid){
@@ -846,6 +865,77 @@ function renderPremios() {
   const el = document.getElementById("premios-container");
   if (el) el.innerHTML = html;
 }
+
+// ── AUDITORÍA ────────────────────────────────────────────────────────────────
+window.verAuditoria = async () => {
+  const el = document.getElementById("auditoria-lista");
+  el.innerHTML = "<p class='vacio'>Cargando...</p>";
+
+  const usSnap = await getDocs(collection(db,"usuarios"));
+  let filas = [];
+
+  for (const ud of usSnap.docs) {
+    const proSnap = await getDoc(doc(db,"pronosticos",ud.id));
+    if (!proSnap.exists()) continue;
+    const pros = proSnap.data();
+    const nombre = ud.data().nombre;
+
+    for (const [pid, pro] of Object.entries(pros)) {
+      if (!pro.ts) continue;
+      const partido = partidos.find(p => p.id === pid);
+      if (!partido) continue;
+
+      const tsGuardado = new Date(pro.ts);
+      const inicioPartido = new Date(`${partido.fecha}T${partido.hora}:00`);
+      // Convertir inicio a UTC (Panama es UTC-5)
+      const inicioUTC = new Date(inicioPartido.getTime() + 5 * 60 * 60 * 1000);
+      const esTrampa = tsGuardado > inicioUTC;
+
+      filas.push({
+        nombre, pid, partido,
+        pronostico: `${pro.local}-${pro.visitante}`,
+        tsGuardado, inicioUTC, esTrampa
+      });
+    }
+  }
+
+  // Ordenar: trampas primero, luego por fecha
+  filas.sort((a,b) => b.esTrampa - a.esTrampa || b.tsGuardado - a.tsGuardado);
+
+  if (filas.length === 0) {
+    el.innerHTML = "<p class='vacio'>No hay pronósticos registrados</p>";
+    return;
+  }
+
+  const trampas = filas.filter(f => f.esTrampa).length;
+  let html = "";
+
+  if (trampas > 0) {
+    html += `<div class="audit-alerta">⚠️ Se detectaron ${trampas} pronóstico(s) guardados después del inicio del partido</div>`;
+  } else {
+    html += `<div class="audit-ok">✅ Todo limpio — ningún pronóstico fue guardado después del inicio</div>`;
+  }
+
+  html += `<div class="audit-hdr">
+    <span>Usuario</span><span>Partido</span><span>Pronóstico</span><span>Guardado</span>
+  </div>`;
+
+  filas.forEach(f => {
+    const hora = f.tsGuardado.toLocaleString("es-PA", {
+      timeZone: "America/Panama",
+      day:"2-digit", month:"2-digit",
+      hour:"2-digit", minute:"2-digit"
+    });
+    html += `<div class="audit-row ${f.esTrampa?"audit-fraude":""}">
+      <span class="audit-nombre">${f.nombre}</span>
+      <span class="audit-partido">${f.partido.L} vs ${f.partido.V}<br><small>${f.partido.fecha} ${f.partido.hora}</small></span>
+      <span class="audit-pro">${f.pronostico}</span>
+      <span class="audit-ts">${hora}${f.esTrampa?' <span class="audit-warning">⚠️ TARDÍO</span>':''}</span>
+    </div>`;
+  });
+
+  el.innerHTML = html;
+};
 
 // ── RENDER AUTH ───────────────────────────────────────────────────────────────
 function mostrarAuth(){
@@ -1249,6 +1339,19 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .pm-locked{font-size:.75rem;color:#6b7280;text-align:right;margin-top:.4rem;}
 .pm-pts-badge{background:#d97706;color:#fff;padding:.15rem .5rem;border-radius:20px;font-size:.72rem;font-weight:800;margin-left:.4rem;}
 
+/* ── AUDITORÍA ── */
+.audit-alerta{background:#450a0a;color:#fca5a5;padding:.6rem .75rem;border-radius:8px;font-size:.82rem;font-weight:700;margin-bottom:.6rem;border:1px solid #7f1d1d;}
+.audit-ok{background:#052e16;color:#86efac;padding:.6rem .75rem;border-radius:8px;font-size:.82rem;font-weight:700;margin-bottom:.6rem;border:1px solid #16a34a;}
+.audit-hdr{display:grid;grid-template-columns:1fr 1.5fr .6fr 1.2fr;gap:.4rem;padding:.5rem .6rem;font-size:.7rem;font-weight:700;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);}
+.audit-row{display:grid;grid-template-columns:1fr 1.5fr .6fr 1.2fr;gap:.4rem;padding:.55rem .6rem;background:#111827;border-radius:7px;margin-bottom:.3rem;border:1px solid #1f2937;font-size:.75rem;align-items:center;}
+.audit-row.audit-fraude{border-color:#7f1d1d;background:#1c0000;}
+.audit-nombre{font-weight:700;color:#e5e7eb;}
+.audit-partido{color:#9ca3af;line-height:1.3;}
+.audit-partido small{font-size:.68rem;}
+.audit-pro{font-weight:800;color:#4ade80;text-align:center;}
+.audit-ts{color:#9ca3af;font-size:.72rem;}
+.audit-warning{color:#ef4444;font-weight:800;font-size:.72rem;}
+
 /* ── MISC ── */
 .toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);padding:.72rem 1.2rem;border-radius:10px;font-weight:600;font-size:.88rem;z-index:999;display:none;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.35);max-width:90vw;text-align:center;}
 .tok{background:#16a34a;color:#fff;}
@@ -1509,6 +1612,18 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
           </div>
           <button class="btn-adm-full" style="background:#d97706;" onclick="guardarResultadoMundial()">✅ Guardar Resultado Final</button>
         </div>
+      </div>
+
+      <!-- AUDITORÍA -->
+      <div class="admin-card" style="border-color:#4c1d95;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">
+          <div class="admin-title" style="color:#c4b5fd;margin-bottom:0;">🔍 Auditoría de Pronósticos</div>
+          <button class="btn-adm" style="background:#4c1d95;" onclick="verAuditoria()">🔍 Verificar</button>
+        </div>
+        <p style="font-size:.78rem;color:#9ca3af;margin-bottom:.75rem;">
+          Detecta si algún usuario guardó su pronóstico <strong style="color:#fff;">después de la hora de inicio</strong> del partido.
+        </p>
+        <div id="auditoria-lista"></div>
       </div>
 
       <div class="admin-card">
