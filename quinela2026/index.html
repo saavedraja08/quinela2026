@@ -27,6 +27,7 @@ const firebaseConfig = {
   measurementId: "G-PHKHRR5LGW"
 };
 const ADMIN_EMAIL = "saavedraja08@gmail.com";
+const APP_VERSION = "1.0.6"; // Incrementar con cada actualización
 
 // ── CÓDIGO DE INVITACIÓN (cámbialo cuando quieras) ───────────────────────────
 const CODIGO_INVITACION = "mundial2026";
@@ -1652,20 +1653,32 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 <div id="toast" class="toast"></div>
 <script>
 if ('serviceWorker' in navigator) {
-  // Limpiar todos los caches viejos primero
   window.addEventListener('load', async () => {
-    // Desregistrar service workers viejos
-    const regs = await navigator.serviceWorker.getRegistrations();
-    for (let reg of regs) await reg.unregister();
-    // Limpiar todos los caches
-    const keys = await caches.keys();
-    for (let key of keys) await caches.delete(key);
-    // Registrar nuevo SW
-    navigator.serviceWorker.register('sw.js?v=4')
-      .then(() => console.log('SW registrado v4'))
+    // Verificar versión — si cambió, limpiar todo el cache
+    const savedVersion = localStorage.getItem("app_version");
+    if (savedVersion !== APP_VERSION) {
+      console.log(`Nueva versión ${APP_VERSION}, limpiando cache...`);
+      // Desregistrar SWs viejos
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (let reg of regs) await reg.unregister();
+      // Limpiar todos los caches
+      const keys = await caches.keys();
+      for (let key of keys) await caches.delete(key);
+      // Guardar nueva versión
+      localStorage.setItem("app_version", APP_VERSION);
+      // Recargar para obtener versión fresca
+      window.location.reload(true);
+      return;
+    }
+    // Registrar SW
+    navigator.serviceWorker.register('sw.js?v=' + APP_VERSION)
+      .then(() => console.log('SW registrado v' + APP_VERSION))
       .catch(e => console.log('SW error:', e));
   });
 }
+
+// Mostrar versión en consola
+console.log("Quiniela Mundial 2026 - v" + APP_VERSION);
 
 // Banner de instalación
 let deferredPrompt;
