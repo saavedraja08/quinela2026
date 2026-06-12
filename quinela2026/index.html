@@ -27,7 +27,7 @@ const firebaseConfig = {
   measurementId: "G-PHKHRR5LGW"
 };
 const ADMIN_EMAIL = "saavedraja08@gmail.com";
-const APP_VERSION = "1.0.6"; // Incrementar con cada actualización
+const APP_VERSION = "1.0.7"; // Incrementar con cada actualización
 
 // ── CÓDIGO DE INVITACIÓN (cámbialo cuando quieras) ───────────────────────────
 const CODIGO_INVITACION = "mundial2026";
@@ -682,22 +682,32 @@ function calcPts(pro,res){
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function ahoraPanama() {
-  // Hora actual ajustada al servidor + convertida a hora de Panamá (UTC-5)
+  // Usar Intl para obtener hora exacta en Panama independiente del dispositivo
   const ahoraUTC = Date.now() + serverTimeOffset;
-  // Panamá es UTC-5 siempre (no tiene horario de verano)
-  return new Date(ahoraUTC - 5 * 60 * 60 * 1000);
+  const fmt = new Intl.DateTimeFormat("es-PA", {
+    timeZone: "America/Panama",
+    year:"numeric", month:"2-digit", day:"2-digit",
+    hour:"2-digit", minute:"2-digit", second:"2-digit", hour12:false
+  });
+  const partes = fmt.formatToParts(new Date(ahoraUTC));
+  const get = t => partes.find(p=>p.type===t)?.value;
+  return {
+    fecha: `${get("year")}-${get("month")}-${get("day")}`,
+    hora:  `${get("hour")}:${get("minute")}`
+  };
 }
 
 function esHoy(p){
   if (modoTestGlobal) return true;
   const ahora = ahoraPanama();
-  // Construir fecha de inicio del partido en hora Panama
-  const [py,pm,pd] = p.fecha.split("-").map(Number);
-  const [ph,pmin] = p.hora.split(":").map(Number);
-  const inicioPartido = new Date(Date.UTC(py, pm-1, pd, ph+5, pmin)); // UTC+5 para convertir Panama a UTC
-  if (ahora >= new Date(inicioPartido.getTime() - serverTimeOffset)) return false;
+  // Comparar directamente como strings YYYY-MM-DD HH:MM
+  const ahoraStr = `${ahora.fecha} ${ahora.hora}`;
+  const inicioStr = `${p.fecha} ${p.hora}`;
+  // Si la hora actual es >= hora de inicio, bloquear
+  if (ahoraStr >= inicioStr) return false;
   if (fechaSimulada) return p.fecha === fechaSimulada;
-  return ahora.getUTCFullYear()===py && ahora.getUTCMonth()+1===pm && ahora.getUTCDate()===pd;
+  // Solo partidos de hoy
+  return ahora.fecha === p.fecha;
 }
 
 function estaTerminado(pid){
