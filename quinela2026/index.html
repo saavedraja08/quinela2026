@@ -27,7 +27,7 @@ const firebaseConfig = {
   measurementId: "G-PHKHRR5LGW"
 };
 const ADMIN_EMAIL = "saavedraja08@gmail.com";
-const APP_VERSION = "1.0.7"; // Incrementar con cada actualización
+const APP_VERSION = "1.0.9"; // Incrementar con cada actualización
 
 // ── CÓDIGO DE INVITACIÓN (cámbialo cuando quieras) ───────────────────────────
 const CODIGO_INVITACION = "mundial2026";
@@ -308,6 +308,7 @@ async function cargarDatos() {
 window.guardarPronostico = async pid => {
   const p = partidos.find(x=>x.id===pid);
   if (!p||!esHoy(p)) return toast("Solo puedes pronosticar partidos de hoy","err");
+  if (pronosticos[pid] && !modoTestGlobal && !fechaSimulada) return toast("Ya tienes un pronóstico para este partido. No se puede modificar.","err");
   if (tieneResultado(pid) && !modoTestGlobal && !fechaSimulada) return toast("Este partido ya tiene resultado","err");
   const gl = parseInt(document.getElementById("gl-"+pid).value);
   const gv = parseInt(document.getElementById("gv-"+pid).value);
@@ -1080,9 +1081,7 @@ function cardPartido(p){
       </div>
     </div>
     ${hoy&&!terminado?`
-    <button class="btn-pred" onclick="toggleForm('${p.id}')">
-      ${pro?"✏️ Editar pronóstico":"🎯 Predecir"}
-    </button>
+    ${!pro ? `<button class="btn-pred" onclick="toggleForm('${p.id}')">🎯 Predecir</button>` : ""}
     <div id="form-${p.id}" class="pform" style="display:none">
       <input type="number" id="gl-${p.id}" min="0" max="20" value="${pro?pro.local:""}" placeholder="0" class="ginput">
       <span class="gdash">-</span>
@@ -1662,32 +1661,16 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 
 <div id="toast" class="toast"></div>
 <script>
+// Eliminar cualquier service worker previo y limpiar cache
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    // Verificar versión — si cambió, limpiar todo el cache
-    const savedVersion = localStorage.getItem("app_version");
-    if (savedVersion !== APP_VERSION) {
-      console.log(`Nueva versión ${APP_VERSION}, limpiando cache...`);
-      // Desregistrar SWs viejos
-      const regs = await navigator.serviceWorker.getRegistrations();
-      for (let reg of regs) await reg.unregister();
-      // Limpiar todos los caches
-      const keys = await caches.keys();
-      for (let key of keys) await caches.delete(key);
-      // Guardar nueva versión
-      localStorage.setItem("app_version", APP_VERSION);
-      // Recargar para obtener versión fresca
-      window.location.reload(true);
-      return;
-    }
-    // Registrar SW
-    navigator.serviceWorker.register('sw.js?v=' + APP_VERSION)
-      .then(() => console.log('SW registrado v' + APP_VERSION))
-      .catch(e => console.log('SW error:', e));
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(reg => reg.unregister());
+  });
+  caches.keys().then(keys => {
+    keys.forEach(key => caches.delete(key));
   });
 }
 
-// Mostrar versión en consola
 console.log("Quiniela Mundial 2026 - v" + APP_VERSION);
 
 // Banner de instalación
