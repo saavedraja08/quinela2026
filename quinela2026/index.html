@@ -61,7 +61,7 @@ const PARTIDOS = [
   // 12 jun
   {id:"B1",g:"B",fecha:"2026-06-12",hora:"14:00",L:"Canadá",V:"Bosnia y Herz."},
   {id:"D1",g:"D",fecha:"2026-06-12",hora:"20:00",L:"Estados Unidos",V:"Paraguay"},
-  {id:"D2",g:"D",fecha:"2026-06-12",hora:"23:00",L:"Australia",V:"Turquía"},
+  {id:"D2",g:"D",fecha:"2026-06-13",hora:"23:00",L:"Australia",V:"Turquía"},
   // 13 jun
   {id:"B2",g:"B",fecha:"2026-06-13",hora:"14:00",L:"Qatar",V:"Suiza"},
   {id:"C1",g:"C",fecha:"2026-06-13",hora:"17:00",L:"Brasil",V:"Marruecos"},
@@ -1537,9 +1537,17 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 <div id="toast" class="toast"></div>
 <script>
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js')
-      .then(() => console.log('SW registrado'))
+  // Limpiar todos los caches viejos primero
+  window.addEventListener('load', async () => {
+    // Desregistrar service workers viejos
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (let reg of regs) await reg.unregister();
+    // Limpiar todos los caches
+    const keys = await caches.keys();
+    for (let key of keys) await caches.delete(key);
+    // Registrar nuevo SW
+    navigator.serviceWorker.register('sw.js?v=4')
+      .then(() => console.log('SW registrado v4'))
       .catch(e => console.log('SW error:', e));
   });
 }
