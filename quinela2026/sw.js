@@ -1,13 +1,13 @@
-const CACHE = 'quinela2026-v1';
+const CACHE = 'quinela2026-v3';
 const ASSETS = [
   '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png'
+  '/quinela2026/quinela2026/',
+  '/quinela2026/quinela2026/index.html',
+  '/quinela2026/quinela2026/manifest.json',
+  '/quinela2026/quinela2026/icon-192.png',
+  '/quinela2026/quinela2026/icon-512.png'
 ];
 
-// Instalar y cachear recursos
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(cache => cache.addAll(ASSETS))
@@ -15,7 +15,6 @@ self.addEventListener('install', e => {
   self.skipWaiting();
 });
 
-// Limpiar caches viejos
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
@@ -25,11 +24,8 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-// Estrategia: red primero, cache como fallback
 self.addEventListener('fetch', e => {
-  // Solo cachear requests GET
   if (e.request.method !== 'GET') return;
-  // No interceptar Firebase ni APIs externas
   if (e.request.url.includes('firebaseapp') ||
       e.request.url.includes('googleapis') ||
       e.request.url.includes('gstatic')) return;
