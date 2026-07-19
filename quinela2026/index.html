@@ -27,7 +27,7 @@ const firebaseConfig = {
   measurementId: "G-PHKHRR5LGW"
 };
 const ADMIN_EMAIL = "saavedraja08@gmail.com";
-const APP_VERSION = "1.1.3"; // Incrementar con cada actualización
+const APP_VERSION = "1.1.4"; // Incrementar con cada actualización
 
 // ── CÓDIGO DE INVITACIÓN (cámbialo cuando quieras) ───────────────────────────
 const CODIGO_INVITACION = "mundial2026";
@@ -161,10 +161,19 @@ let resultadoMundial = {};  // {campeon, subcampeon, tercero} — lo ingresa adm
 function poblarSelectEquipos() {
   const equipos = Object.keys(FLAG).sort();
   const opts = equipos.map(e => `<option value="${e}">${FLAG[e]} ${e}</option>`).join("");
+  const base = `<option value="">Selecciona equipo</option>` + opts;
+  // Eliminatoria
   const selL = document.getElementById("eli-L");
   const selV = document.getElementById("eli-V");
   if (selL) selL.innerHTML = `<option value="">🏳️ Selecciona equipo local</option>` + opts;
   if (selV) selV.innerHTML = `<option value="">🏳️ Selecciona equipo visitante</option>` + opts;
+  // Resultado Mundial
+  const rmc = document.getElementById("rm-campeon");
+  const rms = document.getElementById("rm-subcampeon");
+  const rmt = document.getElementById("rm-tercero");
+  if (rmc) rmc.innerHTML = base;
+  if (rms) rms.innerHTML = base;
+  if (rmt) rmt.innerHTML = base;
 }
 
 async function initFirebase() {
@@ -1709,15 +1718,15 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
         <div class="admin-form-grid">
           <div>
             <label style="font-size:.75rem;color:#9ca3af;display:block;margin-bottom:.3rem;">🥇 Campeón</label>
-            <select id="rm-campeon" class="admin-input">${Object.keys(FLAG).sort().map(e=>`<option value="${e}">${e}</option>`).join("")}</select>
+            <select id="rm-campeon" class="admin-input"><option value="">Selecciona equipo</option></select>
           </div>
           <div>
             <label style="font-size:.75rem;color:#9ca3af;display:block;margin-bottom:.3rem;">🥈 Subcampeón</label>
-            <select id="rm-subcampeon" class="admin-input">${Object.keys(FLAG).sort().map(e=>`<option value="${e}">${e}</option>`).join("")}</select>
+            <select id="rm-subcampeon" class="admin-input"><option value="">Selecciona equipo</option></select>
           </div>
           <div>
             <label style="font-size:.75rem;color:#9ca3af;display:block;margin-bottom:.3rem;">🥉 Tercer lugar</label>
-            <select id="rm-tercero" class="admin-input">${Object.keys(FLAG).sort().map(e=>`<option value="${e}">${e}</option>`).join("")}</select>
+            <select id="rm-tercero" class="admin-input"><option value="">Selecciona equipo</option></select>
           </div>
           <button class="btn-adm-full" style="background:#d97706;" onclick="guardarResultadoMundial()">✅ Guardar Resultado Final</button>
         </div>
