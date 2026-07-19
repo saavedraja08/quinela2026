@@ -156,6 +156,7 @@ let partidos = [...PARTIDOS];
 let serverTimeOffset = 0; // diferencia entre reloj local y servidor en ms
 let pronosticoMundial = {}; // {campeon, subcampeon, tercero}
 let resultadoMundial = {};  // {campeon, subcampeon, tercero} — lo ingresa admin
+let todosPronosticosMundial = {}; // {uid: {campeon, subcampeon, tercero}}
 
 // ── FIREBASE INIT ─────────────────────────────────────────────────────────────
 function poblarSelectEquipos() {
@@ -290,6 +291,10 @@ async function cargarDatos() {
   } catch(e) { serverTimeOffset = 0; }
   const pmSnap = await getDoc(doc(db,"pronosticos_mundial",currentUser.uid));
   pronosticoMundial = pmSnap.exists() ? pmSnap.data() : {};
+  // Cargar pronósticos del mundial de todos los usuarios
+  const allPmSnap = await getDocs(collection(db,"pronosticos_mundial"));
+  todosPronosticosMundial = {};
+  allPmSnap.forEach(d => { if (d.data().campeon) todosPronosticosMundial[d.id] = d.data(); });
   const rmSnap = await getDoc(doc(db,"config","resultado_mundial"));
   resultadoMundial = rmSnap.exists() ? rmSnap.data() : {};
 
@@ -423,7 +428,8 @@ window.resetTotal = async () => {
 
   toast("✅ Quiniela reseteada. Lista para productivo 🚀","ok");
   renderPartidos(); renderTabla(); renderPremios();
-  renderPronosticoMundial(); renderAdminPartidos(); renderUsuarios();
+  renderPronosticoMundial();
+  renderTodosPronosticosMundial(); renderAdminPartidos(); renderUsuarios();
   actualizarBannerTest();
 };
 
@@ -478,7 +484,12 @@ window.guardarPronosticoMundial = async () => {
   pronosticoMundial = {campeon:c, subcampeon:s, tercero:t, ts:new Date().toISOString()};
   await setDoc(doc(db,"pronosticos_mundial",currentUser.uid), pronosticoMundial);
   toast("✅ Pronóstico del Mundial guardado. ¡No se puede modificar!","ok");
+  // Actualizar lista de todos
+  const allPmSnap2 = await getDocs(collection(db,"pronosticos_mundial"));
+  todosPronosticosMundial = {};
+  allPmSnap2.forEach(d => { if (d.data().campeon) todosPronosticosMundial[d.id] = d.data(); });
   renderPronosticoMundial();
+  renderTodosPronosticosMundial();
 };
 
 window.guardarResultadoMundial = async () => {
@@ -587,6 +598,75 @@ function renderPronosticoMundial() {
   html += `</div>`;
   const el = document.getElementById("pronostico-mundial-container");
   if (el) el.innerHTML = html;
+}
+
+function renderTodosPronosticosMundial() {
+  const el = document.getElementById("todos-pronosticos-mundial");
+  if (!el) return;
+
+  const tieneResultado = Object.keys(resultadoMundial).length > 0;
+
+  // Ordenar usuarios por puntos totales
+  const lista = [...usuarios]
+    .filter(u => u.estado === "aprobado" && todosPronosticosMundial[u.uid])
+    .map(u => ({
+      ...u,
+      pm: todosPronosticosMundial[u.uid],
+      total: (u.puntos||0) + (u.puntos_mundial||0)
+    }))
+    .sort((a,b) => b.total - a.total);
+
+  if (lista.length === 0) {
+    el.innerHTML = "<p class='vacio'>Ningún participante ha registrado su pronóstico aún</p>";
+    return;
+  }
+
+  let html = `<div class="legend">
+    <div class="legend-title">🌍 Pronósticos del Campeón — Todos los participantes</div>
+    <div style="display:flex;flex-direction:column;gap:.5rem;margin-top:.5rem;">`;
+
+  lista.forEach((u, i) => {
+    const pm = u.pm;
+    const yo = u.uid === currentUser?.uid;
+    const medal = i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}.`;
+    const pmPts = u.puntos_mundial||0;
+
+    const claseC = tieneResultado ? (pm.campeon===resultadoMundial.campeon?"pm-exacto":[resultadoMundial.campeon,resultadoMundial.subcampeon,resultadoMundial.tercero].includes(pm.campeon)?"pm-parcial":"pm-fallo") : "";
+    const claseS = tieneResultado ? (pm.subcampeon===resultadoMundial.subcampeon?"pm-exacto":[resultadoMundial.campeon,resultadoMundial.subcampeon,resultadoMundial.tercero].includes(pm.subcampeon)?"pm-parcial":"pm-fallo") : "";
+    const claseT = tieneResultado ? (pm.tercero===resultadoMundial.tercero?"pm-exacto":[resultadoMundial.campeon,resultadoMundial.subcampeon,resultadoMundial.tercero].includes(pm.tercero)?"pm-parcial":"pm-fallo") : "";
+
+    html += `<div style="background:#1e2530;border-radius:10px;padding:.75rem;border:1px solid ${yo?"#16a34a":"#2d3748"};">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">
+        <span style="font-weight:700;color:#e5e7eb;">${medal} ${u.nombre}${yo?" <em style='color:#16a34a;font-style:normal;font-size:.75rem'>(tú)</em>":""}</span>
+        ${pmPts>0?`<span style="font-size:.72rem;font-weight:800;background:#d97706;color:#fff;padding:.15rem .5rem;border-radius:20px;">+${pmPts}pts 🌍</span>`:""}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.3rem;">
+        <div class="pm-podio-item ${claseC}" style="padding:.4rem .65rem;">
+          <span class="pm-med">🥇</span>
+          <span style="font-size:.85rem;">${FLAG[pm.campeon]||"🏳️"} ${pm.campeon}</span>
+        </div>
+        <div class="pm-podio-item ${claseS}" style="padding:.4rem .65rem;">
+          <span class="pm-med">🥈</span>
+          <span style="font-size:.85rem;">${FLAG[pm.subcampeon]||"🏳️"} ${pm.subcampeon}</span>
+        </div>
+        <div class="pm-podio-item ${claseT}" style="padding:.4rem .65rem;">
+          <span class="pm-med">🥉</span>
+          <span style="font-size:.85rem;">${FLAG[pm.tercero]||"🏳️"} ${pm.tercero}</span>
+        </div>
+      </div>
+    </div>`;
+  });
+
+  // Usuarios sin pronóstico
+  const sinPro = usuarios.filter(u => u.estado==="aprobado" && !todosPronosticosMundial[u.uid]);
+  if (sinPro.length > 0) {
+    html += `<div style="font-size:.75rem;color:#6b7280;text-align:center;padding:.5rem;">
+      Sin pronóstico: ${sinPro.map(u=>u.nombre).join(", ")}
+    </div>`;
+  }
+
+  html += `</div></div>`;
+  el.innerHTML = html;
 }
 
 function pro_clase(pos) {
@@ -919,12 +999,11 @@ function renderPremios() {
   const total = pagados.length * CUOTA;
   const premios = DIST.map(p => Math.round(total * p * 100) / 100);
 
-  // Igual que Tabla: total = puntos + puntos_mundial
+  // Clasificación actual (solo aprobados)
   const aprobados = [...usuarios]
     .filter(u => u.estado === "aprobado")
-    .map(u => ({...u, total: (u.puntos||0) + (u.puntos_mundial||0)}))
     .sort((a,b) => {
-      if (b.total !== a.total) return b.total - a.total;
+      if ((b.puntos||0) !== (a.puntos||0)) return (b.puntos||0)-(a.puntos||0);
       if ((b.exactos||0) !== (a.exactos||0)) return (b.exactos||0)-(a.exactos||0);
       return (b.ganadores||0)-(a.ganadores||0);
     });
@@ -940,37 +1019,40 @@ function renderPremios() {
       <div class="premio-pos">🥇 1er lugar</div>
       <div class="premio-monto">$${premios[0].toFixed(2)}</div>
       <div class="premio-pct">50%</div>
-      ${aprobados[0] ? `<div class="premio-lider">${aprobados[0].nombre} (${aprobados[0].total}pts)</div>` : ""}
+      ${aprobados[0] ? `<div class="premio-lider">${aprobados[0].nombre}</div>` : ""}
     </div>
     <div class="premio-card plata">
       <div class="premio-pos">🥈 2do lugar</div>
       <div class="premio-monto">$${premios[1].toFixed(2)}</div>
       <div class="premio-pct">30%</div>
-      ${aprobados[1] ? `<div class="premio-lider">${aprobados[1].nombre} (${aprobados[1].total}pts)</div>` : ""}
+      ${aprobados[1] ? `<div class="premio-lider">${aprobados[1].nombre}</div>` : ""}
     </div>
     <div class="premio-card bronce">
       <div class="premio-pos">🥉 3er lugar</div>
       <div class="premio-monto">$${premios[2].toFixed(2)}</div>
       <div class="premio-pct">20%</div>
-      ${aprobados[2] ? `<div class="premio-lider">${aprobados[2].nombre} (${aprobados[2].total}pts)</div>` : ""}
+      ${aprobados[2] ? `<div class="premio-lider">${aprobados[2].nombre}</div>` : ""}
     </div>
   </div>`;
 
-  // Lista completa con puntos totales y estado de inscripción
+  // Lista de participantes con estado de inscripción
+  const todos = [...usuarios]
+    .filter(u => u.estado === "aprobado")
+    .sort((a,b) => (b.puntos||0) - (a.puntos||0));
+
   html += `<div class="legend" style="margin-top:1rem;">
     <div class="legend-title">📋 Estado de Inscripciones</div>
     <div class="insc-lista">`;
 
-  aprobados.forEach((u, i) => {
+  todos.forEach((u, i) => {
     const insc = u.inscripcion || "pendiente";
     const inscColor = insc==="pagado"?"#16a34a":insc==="cancelado"?"#ef4444":"#d97706";
     const inscLabel = insc==="pagado"?"✅ Pagado":insc==="cancelado"?"❌ Cancelado":"⏳ Pendiente";
     const medal = i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}.`;
-    const pmPts = u.puntos_mundial||0;
     html += `<div class="insc-row">
       <span class="insc-pos">${medal}</span>
-      <span class="insc-nombre">${u.nombre}${pmPts>0?` <span style="font-size:.65rem;color:#f59e0b">+${pmPts}🌍</span>`:""}</span>
-      <span class="insc-pts">${u.total} pts</span>
+      <span class="insc-nombre">${u.nombre}</span>
+      <span class="insc-pts">${u.puntos||0} pts</span>
       <span class="insc-badge" style="color:${inscColor};background:${inscColor}22;">${inscLabel}</span>
     </div>`;
   });
@@ -1139,6 +1221,7 @@ window.cambiarTab = tab=>{
   document.getElementById("tab-"+tab).style.display="block";
   document.querySelector(`[data-tab="${tab}"]`).classList.add("active");
   if (tab === "admin") { poblarSelectEquipos(); renderEliminatorias(); }
+  if (tab === "mundial") renderTodosPronosticosMundial();
 };
 
 window.cambiarVista = v=>{
@@ -1556,6 +1639,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <div class="main-content">
       <div class="seccion-titulo">🌍 Pronóstico del Campeón</div>
       <div id="pronostico-mundial-container"></div>
+      <div id="todos-pronosticos-mundial" style="margin-top:1rem;"></div>
     </div>
   </div>
 
