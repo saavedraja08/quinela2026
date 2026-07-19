@@ -27,7 +27,7 @@ const firebaseConfig = {
   measurementId: "G-PHKHRR5LGW"
 };
 const ADMIN_EMAIL = "saavedraja08@gmail.com";
-const APP_VERSION = "1.1.4"; // Incrementar con cada actualización
+const APP_VERSION = "1.1.6"; // Incrementar con cada actualización
 
 // ── CÓDIGO DE INVITACIÓN (cámbialo cuando quieras) ───────────────────────────
 const CODIGO_INVITACION = "mundial2026";
@@ -919,11 +919,12 @@ function renderPremios() {
   const total = pagados.length * CUOTA;
   const premios = DIST.map(p => Math.round(total * p * 100) / 100);
 
-  // Clasificación actual (solo aprobados)
+  // Igual que Tabla: total = puntos + puntos_mundial
   const aprobados = [...usuarios]
     .filter(u => u.estado === "aprobado")
+    .map(u => ({...u, total: (u.puntos||0) + (u.puntos_mundial||0)}))
     .sort((a,b) => {
-      if ((b.puntos||0) !== (a.puntos||0)) return (b.puntos||0)-(a.puntos||0);
+      if (b.total !== a.total) return b.total - a.total;
       if ((b.exactos||0) !== (a.exactos||0)) return (b.exactos||0)-(a.exactos||0);
       return (b.ganadores||0)-(a.ganadores||0);
     });
@@ -939,40 +940,37 @@ function renderPremios() {
       <div class="premio-pos">🥇 1er lugar</div>
       <div class="premio-monto">$${premios[0].toFixed(2)}</div>
       <div class="premio-pct">50%</div>
-      ${aprobados[0] ? `<div class="premio-lider">${aprobados[0].nombre}</div>` : ""}
+      ${aprobados[0] ? `<div class="premio-lider">${aprobados[0].nombre} (${aprobados[0].total}pts)</div>` : ""}
     </div>
     <div class="premio-card plata">
       <div class="premio-pos">🥈 2do lugar</div>
       <div class="premio-monto">$${premios[1].toFixed(2)}</div>
       <div class="premio-pct">30%</div>
-      ${aprobados[1] ? `<div class="premio-lider">${aprobados[1].nombre}</div>` : ""}
+      ${aprobados[1] ? `<div class="premio-lider">${aprobados[1].nombre} (${aprobados[1].total}pts)</div>` : ""}
     </div>
     <div class="premio-card bronce">
       <div class="premio-pos">🥉 3er lugar</div>
       <div class="premio-monto">$${premios[2].toFixed(2)}</div>
       <div class="premio-pct">20%</div>
-      ${aprobados[2] ? `<div class="premio-lider">${aprobados[2].nombre}</div>` : ""}
+      ${aprobados[2] ? `<div class="premio-lider">${aprobados[2].nombre} (${aprobados[2].total}pts)</div>` : ""}
     </div>
   </div>`;
 
-  // Lista de participantes con estado de inscripción
-  const todos = [...usuarios]
-    .filter(u => u.estado === "aprobado")
-    .sort((a,b) => (b.puntos||0) - (a.puntos||0));
-
+  // Lista completa con puntos totales y estado de inscripción
   html += `<div class="legend" style="margin-top:1rem;">
     <div class="legend-title">📋 Estado de Inscripciones</div>
     <div class="insc-lista">`;
 
-  todos.forEach((u, i) => {
+  aprobados.forEach((u, i) => {
     const insc = u.inscripcion || "pendiente";
     const inscColor = insc==="pagado"?"#16a34a":insc==="cancelado"?"#ef4444":"#d97706";
     const inscLabel = insc==="pagado"?"✅ Pagado":insc==="cancelado"?"❌ Cancelado":"⏳ Pendiente";
     const medal = i===0?"🥇":i===1?"🥈":i===2?"🥉":`${i+1}.`;
+    const pmPts = u.puntos_mundial||0;
     html += `<div class="insc-row">
       <span class="insc-pos">${medal}</span>
-      <span class="insc-nombre">${u.nombre}</span>
-      <span class="insc-pts">${u.puntos||0} pts</span>
+      <span class="insc-nombre">${u.nombre}${pmPts>0?` <span style="font-size:.65rem;color:#f59e0b">+${pmPts}🌍</span>`:""}</span>
+      <span class="insc-pts">${u.total} pts</span>
       <span class="insc-badge" style="color:${inscColor};background:${inscColor}22;">${inscLabel}</span>
     </div>`;
   });
